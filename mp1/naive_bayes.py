@@ -20,8 +20,6 @@ so be careful to not modify anything else.
 import reader
 import math
 from tqdm import tqdm
-from collections import Counter
-
 
 '''
 util for printing values
@@ -47,11 +45,64 @@ Main function for training and predicting with naive bayes.
     You can modify the default values for the Laplace smoothing parameter and the prior for the positive label.
     Notice that we may pass in specific values for these parameters during our testing.
 """
-def naive_bayes(train_set, train_labels, dev_set, laplace=1.0, pos_prior=0.5, silently=False):
-    print_values(laplace,pos_prior)
+def naive_bayes(train_set, train_labels, dev_set, laplace=1.0, pos_prior=0.5, silently=False):    
+    
+    # print("Training Set", train_set[0], len(train_set))
+    # print("Training Labels", train_labels, len(train_labels))
+    # print("Dev Set", dev_set[0], len(dev_set))
+    
+    # Training phase    
+    pos = {}
+    neg = {}
+    words = set()
+    
+    total_pos = 0
+    total_neg = 0
 
+    for index in range(len(train_set)):
+        document = train_set[index]
+        label = train_labels[index]
+        
+        if label == 1:
+            for word in document: 
+                if word in pos: 
+                    pos[word] += 1
+                else:
+                    pos[word] = 1
+                    words.add(word)
+                total_pos += 1
+        elif label == 0:
+            for word in document:
+                if word in neg: 
+                    neg[word] += 1
+                else:
+                    neg[word] = 1
+                    words.add(word)
+                total_neg += 1
+    
+    # Development phase 
     yhats = []
+    
     for doc in tqdm(dev_set, disable=silently):
-        yhats.append(-1)
+        pos_prob = math.log(pos_prior)
+        neg_prob = math.log(1 - pos_prior)
+        
+        for word in doc:
+            pos_add = laplace / (total_pos + laplace * len(words))
+            neg_add = laplace / (total_pos + laplace * len(words))
+            
+            if word in pos: 
+                pos_add = (pos[word] + laplace) / (total_pos + laplace * len(words))
+                                                
+            if word in neg: 
+                neg_add = (neg[word] + laplace) / (total_neg + laplace * len(words))
+
+            pos_prob += math.log(pos_add)
+            neg_prob += math.log(neg_add)
+
+        if pos_prob > neg_prob:
+            yhats.append(1)
+        else:
+            yhats.append(0)
 
     return yhats
