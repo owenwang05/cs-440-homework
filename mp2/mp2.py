@@ -50,7 +50,7 @@ Main function
     instead of constantly typing your favorite values at the command line.
 """
 def main(args):
-    train_set, train_labels, dev_set, dev_labels = nb.load_data(args.training_dir,args.development_dir,args.stemming,args.lowercase)
+    train_set, train_labels, dev_set, dev_labels = nb.load_data(args.training_dir,args.development_dir,args.stemming,True)
     
     predicted_labels = nb.bigram_bayes(train_set, train_labels, dev_set,
                                           args.laplace,args.bigram_laplace, args.bigram_lambda,args.pos_prior)

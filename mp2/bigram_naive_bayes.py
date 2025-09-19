@@ -20,7 +20,6 @@ so be careful to not modify anything else.
 import reader
 import math
 from tqdm import tqdm
-from collections import Counter
 
 
 '''
@@ -53,12 +52,87 @@ Main function for training and predicting with the bigram mixture model.
     You can modify the default values for the Laplace smoothing parameters, model-mixture lambda parameter, and the prior for the positive label.
     Notice that we may pass in specific values for these parameters during our testing.
 """
-def bigram_bayes(train_set, train_labels, dev_set, unigram_laplace=1.0, bigram_laplace=1.0, bigram_lambda=1.0, pos_prior=0.5, silently=False):
-    print_values_bigram(unigram_laplace,bigram_laplace,bigram_lambda,pos_prior)
+def bigram_bayes(train_set, train_labels, dev_set, unigram_laplace=0.33, bigram_laplace=1.0, bigram_lambda=0.5, pos_prior=0.5, silently=False):
+    # unigram counts
+    pos_uni = {}
+    neg_uni = {}
+    unigrams = set()
+    total_pos_uni = 0
+    total_neg_uni = 0
 
+    # bigram counts
+    pos_bi = {}
+    neg_bi = {}
+    bigrams = set()
+    total_pos_bi = 0 
+    total_neg_bi = 0
+
+    for index in range(len(train_set)):
+        document = train_set[index]
+        label = train_labels[index]
+        
+        # unigrams
+        for word in document:
+            if label == 1:
+                if word in pos_uni: 
+                    pos_uni[word] += 1
+                else:
+                    pos_uni[word] = 1
+                    unigrams.add(word)
+                total_pos_uni += 1
+            else:
+                neg_uni[word] = neg_uni.get(word, 0) + 1
+                total_neg_uni += 1
+            unigrams.add(word)
+        
+        # bigrams
+        for i in range(len(document) - 1):
+            bg = (document[i], document[i+1])
+            if label == 1:
+                pos_bi[bg] = pos_bi.get(bg, 0) + 1
+                total_pos_bi += 1
+            else:
+                neg_bi[bg] = neg_bi.get(bg, 0) + 1
+                total_neg_bi += 1
+            bigrams.add(bg)
+
+    # Development phase
     yhats = []
     for doc in tqdm(dev_set, disable=silently):
-        yhats.append(-1)
+        pos_prob = math.log(pos_prior)
+        neg_prob = math.log(1 - pos_prior)
+
+        # build doc unigrams + bigrams
+        doc_unigrams = doc
+        doc_bigrams = [(doc[i], doc[i+1]) for i in range(len(doc)-1)]
+
+        # iterate through bigrams (since mixture combines both)
+        for i in range(len(doc)):
+            # unigram
+            word = doc_unigrams[i]
+            pos_uni_prob = (pos_uni.get(word, 0) + unigram_laplace) / (total_pos_uni + unigram_laplace * len(unigrams))
+            neg_uni_prob = (neg_uni.get(word, 0) + unigram_laplace) / (total_neg_uni + unigram_laplace * len(unigrams))
+
+            if i < len(doc)-1:
+                # bigram
+                bg = doc_bigrams[i]
+                pos_bi_prob = (pos_bi.get(bg, 0) + bigram_laplace) / (total_pos_bi + bigram_laplace * len(bigrams))
+                neg_bi_prob = (neg_bi.get(bg, 0) + bigram_laplace) / (total_neg_bi + bigram_laplace * len(bigrams))
+            else:
+                # bigram = unigram on last character
+                pos_bi_prob = pos_uni_prob
+                neg_bi_prob = neg_uni_prob
+
+            pos_mix = bigram_lambda * pos_bi_prob + (1 - bigram_lambda) * pos_uni_prob
+            neg_mix = bigram_lambda * neg_bi_prob + (1 - bigram_lambda) * neg_uni_prob
+
+            pos_prob += math.log(pos_mix)
+            neg_prob += math.log(neg_mix)
+
+        if pos_prob > neg_prob: 
+            yhats.append(1)
+        else:
+            yhats.append(0)
 
     return yhats
 
