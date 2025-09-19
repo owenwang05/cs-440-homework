@@ -40,7 +40,7 @@ load_data loads the input data by calling the provided utility.
 You can adjust default values for stemming and lowercase, when we haven't passed in specific values,
 to potentially improve performance.
 """
-def load_data(trainingdir, testdir, stemming=False, lowercase=True, silently=False):
+def load_data(trainingdir, testdir, stemming=True, lowercase=True, silently=False):
     print(f"Stemming: {stemming}")
     print(f"Lowercase: {lowercase}")
     train_set, train_labels, dev_set, dev_labels = reader.load_dataset(trainingdir,testdir,stemming,lowercase,silently)
@@ -52,7 +52,9 @@ Main function for training and predicting with the bigram mixture model.
     You can modify the default values for the Laplace smoothing parameters, model-mixture lambda parameter, and the prior for the positive label.
     Notice that we may pass in specific values for these parameters during our testing.
 """
-def bigram_bayes(train_set, train_labels, dev_set, unigram_laplace=0.33, bigram_laplace=1.0, bigram_lambda=0.5, pos_prior=0.5, silently=False):
+def bigram_bayes(train_set, train_labels, dev_set, unigram_laplace=1.0, bigram_laplace=1.0, bigram_lambda=0.33, pos_prior=None, silently=False):
+    print_values_bigram(unigram_laplace,bigram_laplace,bigram_lambda,pos_prior)
+    
     # unigram counts
     pos_uni = {}
     neg_uni = {}
@@ -98,36 +100,31 @@ def bigram_bayes(train_set, train_labels, dev_set, unigram_laplace=0.33, bigram_
 
     # Development phase
     yhats = []
-    for doc in tqdm(dev_set, disable=silently):
-        pos_prob = math.log(pos_prior)
-        neg_prob = math.log(1 - pos_prior)
+    for document in tqdm(dev_set, disable=silently):
+        if pos_prior is None:
+            pos_prior = sum(train_labels) / len(train_labels)
 
-        # build doc unigrams + bigrams
-        doc_unigrams = doc
-        doc_bigrams = [(doc[i], doc[i+1]) for i in range(len(doc)-1)]
-
-        # iterate through bigrams (since mixture combines both)
-        for i in range(len(doc)):
-            # unigram
-            word = doc_unigrams[i]
+        # unigram
+        pos_prob_uni = math.log(pos_prior)
+        neg_prob_uni = math.log(1 - pos_prior)
+        for word in document:
             pos_uni_prob = (pos_uni.get(word, 0) + unigram_laplace) / (total_pos_uni + unigram_laplace * len(unigrams))
             neg_uni_prob = (neg_uni.get(word, 0) + unigram_laplace) / (total_neg_uni + unigram_laplace * len(unigrams))
+            pos_prob_uni += math.log(pos_uni_prob)
+            neg_prob_uni += math.log(neg_uni_prob)
 
-            if i < len(doc)-1:
-                # bigram
-                bg = doc_bigrams[i]
-                pos_bi_prob = (pos_bi.get(bg, 0) + bigram_laplace) / (total_pos_bi + bigram_laplace * len(bigrams))
-                neg_bi_prob = (neg_bi.get(bg, 0) + bigram_laplace) / (total_neg_bi + bigram_laplace * len(bigrams))
-            else:
-                # bigram = unigram on last character
-                pos_bi_prob = pos_uni_prob
-                neg_bi_prob = neg_uni_prob
+        # bigram
+        pos_prob_bi = math.log(pos_prior)
+        neg_prob_bi = math.log(1 - pos_prior)
+        for i in range(len(document)-1):
+            bg = (document[i], document[i+1])
+            pos_bi_prob = (pos_bi.get(bg, 0) + bigram_laplace) / (total_pos_bi + bigram_laplace * len(bigrams))
+            neg_bi_prob = (neg_bi.get(bg, 0) + bigram_laplace) / (total_neg_bi + bigram_laplace * len(bigrams))
+            pos_prob_bi += math.log(pos_bi_prob)
+            neg_prob_bi += math.log(neg_bi_prob)
 
-            pos_mix = bigram_lambda * pos_bi_prob + (1 - bigram_lambda) * pos_uni_prob
-            neg_mix = bigram_lambda * neg_bi_prob + (1 - bigram_lambda) * neg_uni_prob
-
-            pos_prob += math.log(pos_mix)
-            neg_prob += math.log(neg_mix)
+        pos_prob = (1 - bigram_lambda) * pos_prob_uni + bigram_lambda * pos_prob_bi
+        neg_prob = (1 - bigram_lambda) * neg_prob_uni + bigram_lambda * neg_prob_bi
 
         if pos_prob > neg_prob: 
             yhats.append(1)
